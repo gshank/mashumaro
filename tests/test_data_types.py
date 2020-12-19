@@ -58,6 +58,7 @@ class Fixture:
     CHAIN_MAP = collections.ChainMap({'a': 1, 'b': 2}, {'c': 3, 'd': 4})
     MAPS_LIST = [{'a': 1, 'b': 2}, {'c': 3, 'd': 4}]
     DICT = {'a': 1, 'b': 2}
+    MIXED_DICT = {'a': 1, 'b': 'two'}
     BYTES = b'123'
     BYTES_BASE64 = 'MTIz\n'
     BYTE_ARRAY = bytearray(b'123')
@@ -66,7 +67,7 @@ class Fixture:
     INT_ENUM = MyIntEnum.a
     FLAG = MyFlag.a
     INT_FLAG = MyIntFlag.a
-    DATA_CLASS = MyDataClass(a=1, b=2)
+    DATA_CLASS = MyDataClass(a=1, b='two')
     NONE = None
     DATETIME = datetime(2018, 10, 29, 12, 46, 55, 308495)
     DATE = DATETIME.date()
@@ -106,7 +107,7 @@ inner_values = [
     (MyIntEnum, Fixture.INT_ENUM, Fixture.INT_ENUM),
     (MyFlag, Fixture.FLAG, Fixture.FLAG),
     (MyIntFlag, Fixture.INT_FLAG, Fixture.INT_FLAG),
-    (MyDataClass, Fixture.DATA_CLASS, Fixture.DICT),
+    (MyDataClass, Fixture.DATA_CLASS, Fixture.MIXED_DICT),
     (type(None), Fixture.NONE, Fixture.NONE),
     (datetime, Fixture.DATETIME, Fixture.DATETIME),
     (date, Fixture.DATE, Fixture.DATE),
@@ -137,7 +138,7 @@ unsupported_field_types = [
 
 
 T = TypeVar('T', int, str)
-unsupported_typing_primitives = [AnyStr, Union[int, str], T]
+unsupported_typing_primitives = [AnyStr, T]
 
 
 x_factory_mapping = {
