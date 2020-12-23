@@ -3,7 +3,8 @@ from dataclasses import dataclass
 
 from .entities import (
     ShapeCollection,
-    CustomShape
+    CustomShape,
+    ShapeContainer,
 )
 
 from mashumaro.exceptions import UnserializableField, UnserializableDataError,\
@@ -11,17 +12,21 @@ from mashumaro.exceptions import UnserializableField, UnserializableDataError,\
 
 def test_union():
     dumped = {'shapes': ['triange', {'name': 'square', 'num_corners' : 4}]}
-    assert ShapeCollection.from_dict(dumped).to_dict() == dumped
+    assert ShapeCollection._from_dict(dumped)._to_dict() == dumped
 
 def test_invalid_union():
     dumped = {'shapes': ['triange', {'badfield': True}]}
     with pytest.raises(InvalidFieldValue):
-        ShapeCollection.from_dict(dumped)
+        ShapeCollection._from_dict(dumped)
+
+def test_dict_value():
+    dumped = { 'shapes': {} }
+    assert ShapeContainer._from_dict(dumped)._to_dict() == {'shapes': {'name': 'SomeShape', 'num_corners': 4}}
 
 def test_invalid_union_no_match_from_dict():
     dumped = {'shapes': ['triange', {'name': 'square', 'num_corners': 'four'}]}
     with pytest.raises(ValueError):
-        ShapeCollection.from_dict(dumped)
+        ShapeCollection._from_dict(dumped)
 
 def test_invalid_union_no_match_to_dict():
     invalid = ShapeCollection(shapes=[
@@ -30,4 +35,4 @@ def test_invalid_union_no_match_to_dict():
     ])
 
     with pytest.raises(ValueError):
-        invalid.to_dict()
+        invalid._to_dict()

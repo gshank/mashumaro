@@ -25,7 +25,7 @@ class DataClassYAMLMixin(DataClassDictMixin):
             **encoder_kwargs) -> EncodedData:
 
         return encoder(
-            self.to_dict(**dict(DEFAULT_DICT_PARAMS, **dict_params)),
+            self._to_dict(**dict(DEFAULT_DICT_PARAMS, **dict_params)),
             **encoder_kwargs
         )
 
@@ -36,7 +36,7 @@ class DataClassYAMLMixin(DataClassDictMixin):
             decoder: Optional[Decoder] = yaml.safe_load,
             dict_params: Optional[Mapping] = MappingProxyType({}),
             **decoder_kwargs) -> T:
-        return cls.from_dict(
+        return cls._from_dict(
             decoder(data, **decoder_kwargs),
             **dict(DEFAULT_DICT_PARAMS, **dict_params)
         )

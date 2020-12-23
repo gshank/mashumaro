@@ -18,21 +18,29 @@ class DataClassDictMixin:
         if exc:
             raise exc
 
-    def to_dict(
+    def _to_dict(
             self,
             use_bytes: bool = False,
             use_enum: bool = False,
-            use_datetime: bool = False) -> dict:
+            use_datetime: bool = False,
+            omit_none:bool = False) -> dict:
         pass
 
+    def after_to_dict(self, dct, omit_none: bool = False):
+        return dct
+
     @classmethod
-    def from_dict(
+    def _from_dict(
             cls,
             d: Mapping,
             use_bytes: bool = False,
             use_enum: bool = False,
             use_datetime: bool = False) -> 'DataClassDictMixin':
         pass
+
+    @classmethod
+    def before_from_dict(cls, d: Mapping):
+        return d
 
 
 __all__ = [

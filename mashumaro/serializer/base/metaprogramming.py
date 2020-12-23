@@ -123,13 +123,20 @@ class CodeBuilder:
 
         self.reset()
         self.add_line('@classmethod')
-        self.add_line("def from_dict(cls, d, use_bytes=False, use_enum=False, "
+        self.add_line("def _from_dict(cls, d, use_bytes=False, use_enum=False, "
                       "use_datetime=False):")
         with self.indent():
+            self.add_line('d = cls.before_from_dict(d)')
             self.add_line('try:')
             with self.indent():
                 self.add_line("kwargs = {}")
                 for fname, ftype in self.fields.items():
+                    if fname.startswith('_') and fname != '_extra':
+                        continue
+                    # horrible kludge to get around agate table issue
+                    # TODO: fix a better way
+                    if fname == 'agate_table':
+                        continue
                     self._add_type_modules(ftype)
                     self.add_line(f"value = d.get('{fname}', MISSING)")
                     self.add_line("if value is None:")
@@ -190,33 +197,46 @@ class CodeBuilder:
                 self.add_line('if not isinstance(d, dict):')
                 with self.indent():
                     self.add_line(f"raise ValueError('Argument for "
-                                  f"{type_name(self.cls)}.from_dict method "
+                                  f"{type_name(self.cls)}._from_dict method "
                                   f"should be a dict instance') from None")
                 self.add_line('else:')
                 with self.indent():
                     self.add_line('raise')
             self.add_line("return cls(**kwargs)")
-        self.add_line(f"setattr(cls, 'from_dict', from_dict)")
+        self.add_line(f"setattr(cls, '_from_dict', _from_dict)")
+        #print("\n".join(self.lines))
         self.compile()
 
     def add_to_dict(self):
 
         self.reset()
-        self.add_line("def to_dict(self, use_bytes=False, use_enum=False, "
-                      "use_datetime=False):")
+        self.add_line("def _to_dict(self, use_bytes=False, use_enum=False, "
+                      "use_datetime=False, omit_none=False):")
         with self.indent():
             self.add_line("kwargs = {}")
-            for fname, ftype in self.fields.items():
-                self.add_line(f"value = getattr(self, '{fname}')")
-                self.add_line('if value is None:')
-                with self.indent():
-                    self.add_line(f"kwargs['{fname}'] = None")
-                self.add_line('else:')
-                with self.indent():
-                    packed_value = self._pack_value(fname, ftype, self.cls)
-                    self.add_line(f"kwargs['{fname}'] = {packed_value}")
+            self.add_line("try:")
+            with self.indent():
+                self.add_line("field_name = 'initial'")
+                for fname, ftype in self.fields.items():
+                    if fname.startswith('_') or fname == 'agate_table':
+                        continue
+                    self.add_line(f"field_name = '{fname}'")
+                    self.add_line(f"value = getattr(self, '{fname}')")
+                    self.add_line('if value is None:')
+                    with self.indent():
+                        self.add_line(f"kwargs['{fname}'] = None")
+                    self.add_line('else:')
+                    with self.indent():
+                        packed_value = self._pack_value(fname, ftype, self.cls)
+                        self.add_line(f"kwargs['{fname}'] = {packed_value}")
+            self.add_line("except Exception as exc:")
+            with self.indent():
+                self.add_line('raise ValueError(f"to_dict failed handling field \'{field_name}\': {str(exc)}")')
+            self.add_line("kwargs = self.after_to_dict(kwargs, omit_none)")
             self.add_line("return kwargs")
-        self.add_line(f"setattr(cls, 'to_dict', to_dict)")
+        self.add_line(f"setattr(cls, '_to_dict', _to_dict)")
+#       print("\n\n-------------- to_dict ---------------------")
+#       print("\n".join(self.lines))
         self.compile()
 
     def add_pack_union(self, fname, ftype, parent, variant_types, value_name):
@@ -239,14 +259,15 @@ class CodeBuilder:
                         self.add_line('pass')
             else:
                 variant_type_names = ", ".join([type_name(v) for v in variant_types])
-                self.add_line(f"raise ValueError('Union value could not be "
-                              f"encoded using types ({variant_type_names})')")
+                msg = (f"Union value ({{value}}) for {fname} could not be "
+                       f"encoded using types ({variant_type_names})")
+                self.add_line(f'raise ValueError(f"{msg}")')
             return 'resolve_union(value)'
 
     def _pack_value(self, fname, ftype, parent, value_name='value'):
 
         if is_dataclass(ftype):
-            return f"{value_name}.to_dict(use_bytes, use_enum, use_datetime)"
+            return f"{value_name}._to_dict(use_bytes, use_enum, use_datetime, omit_none)"
 
         with suppress(TypeError):
             if issubclass(ftype, SerializableType):
@@ -274,13 +295,19 @@ class CodeBuilder:
             else:
                 raise UnserializableDataError(
                     f'{ftype} as a field type is not supported by mashumaro')
+        # this needs to be bfore issubclass(..., typing.Collection) for python 3.6
+        elif origin_type in (bool, NoneType):
+            return value_name
         elif issubclass(origin_type, typing.Collection):
             args = getattr(ftype, '__args__', ())
 
             def inner_expr(arg_num=0, v_name='value'):
                 return self._pack_value(fname, args[arg_num], parent, v_name)
 
-            if issubclass(origin_type, (typing.List,
+            # this needs to be bfore issubclass(..., typing.Mapping) for python 3.6
+            if issubclass(origin_type, str):
+                return value_name
+            elif issubclass(origin_type, (typing.List,
                                         typing.Deque,
                                         typing.Tuple,
                                         typing.AbstractSet)):
@@ -333,8 +360,6 @@ class CodeBuilder:
             elif issubclass(origin_type, typing.ByteString):
                 return f'{value_name} if use_bytes else ' \
                        f'encodebytes({value_name}).decode()'
-            elif issubclass(origin_type, str):
-                return value_name
             elif issubclass(origin_type, typing.Sequence):
                 if is_generic(ftype):
                     return f'[{inner_expr()} for value in {value_name}]'
@@ -346,8 +371,6 @@ class CodeBuilder:
             return f'int({value_name})'
         elif origin_type is float:
             return f'float({value_name})'
-        elif origin_type in (bool, NoneType):
-            return value_name
         elif origin_type in (datetime.datetime, datetime.date, datetime.time):
             return f'{value_name} if use_datetime else {value_name}.isoformat()'
         elif origin_type is datetime.timedelta:
@@ -390,7 +413,7 @@ class CodeBuilder:
     def _unpack_field_value(self, fname, ftype, parent, value_name='value'):
 
         if is_dataclass(ftype):
-            return f"{type_name(ftype)}.from_dict({value_name}, " \
+            return f"{type_name(ftype)}._from_dict({value_name}, " \
                    f"use_bytes, use_enum, use_datetime)"
 
         with suppress(TypeError):
@@ -409,6 +432,7 @@ class CodeBuilder:
                 if len(args) == 2 and args[1] == NoneType:  # it is Optional
                     return self._unpack_field_value(fname, args[0], parent)
                 else:
+                    # args is 'variant_types' in add_unpack_union call
                     return self.add_unpack_union(fname, ftype, parent, args, value_name)
             elif origin_type is typing.AnyStr:
                 raise UnserializableDataError(
@@ -419,6 +443,9 @@ class CodeBuilder:
             else:
                 raise UnserializableDataError(
                     f'{ftype} as a field type is not supported by mashumaro')
+        # this needs to be bfore issubclass(..., typing.Collection) for python 3.6
+        elif origin_type in (bool, NoneType):
+            return value_name
         elif issubclass(origin_type, typing.Collection):
             args = getattr(ftype, '__args__', ())
 
@@ -426,7 +453,10 @@ class CodeBuilder:
                 return self._unpack_field_value(
                     fname, args[arg_num], parent, v_name)
 
-            if issubclass(origin_type, typing.List):
+            # this needs to be bfore issubclass(..., typing.Mapping) for python 3.6
+            if issubclass(origin_type, str):
+                return value_name
+            elif issubclass(origin_type, typing.List):
                 if is_generic(ftype):
                     return f'[{inner_expr()} for value in {value_name}]'
                 elif ftype is list:
@@ -495,8 +525,6 @@ class CodeBuilder:
                 elif origin_type is bytearray:
                     return f'bytearray({value_name} if use_bytes else ' \
                            f'decodebytes({value_name}.encode()))'
-            elif issubclass(origin_type, str):
-                return value_name
             elif issubclass(origin_type, typing.Sequence):
                 if is_generic(ftype):
                     return f'[{inner_expr()} for value in {value_name}]'
@@ -509,8 +537,6 @@ class CodeBuilder:
             return f'int({value_name})'
         elif origin_type is float:
             return f'float({value_name})'
-        elif origin_type in (bool, NoneType):
-            return value_name
         elif origin_type in (datetime.datetime, datetime.date, datetime.time):
             return f'{value_name} if use_datetime else ' \
                    f'datetime.{origin_type.__name__}.' \

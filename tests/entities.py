@@ -26,6 +26,11 @@ class MyIntFlag(IntFlag):
     b = 2
 
 
+@dataclass
+class ShapeWithDefaults(DataClassDictMixin):
+    name: str = 'SomeShape'
+    num_corners: int = 4
+
 @dataclass 
 class CustomShape(DataClassDictMixin):
     name: str
@@ -35,6 +40,9 @@ class CustomShape(DataClassDictMixin):
 class ShapeCollection(DataClassDictMixin):
     shapes: List[Union[str, CustomShape]]
 
+@dataclass
+class ShapeContainer(DataClassDictMixin):
+    shapes: Union[ShapeWithDefaults, None]
 
 @dataclass
 class MyDataClass(DataClassDictMixin):
