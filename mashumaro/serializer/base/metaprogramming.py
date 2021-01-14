@@ -203,7 +203,7 @@ class CodeBuilder:
         self.add_line("@classmethod")
         self.add_line(
             "def from_dict(cls, d, use_bytes=False, use_enum=False, "
-            "use_datetime=False):"
+            "use_datetime=False, options=None):"
         )
         with self.indent():
             pre_deserialize = self.get_declared_hook(__PRE_DESERIALIZE__)
@@ -214,7 +214,7 @@ class CodeBuilder:
                         f"Callable[[Dict[Any, Any]], Dict[Any, Any]] signature"
                     )
                 else:
-                    self.add_line(f"d = cls.{__PRE_DESERIALIZE__}(d)")
+                    self.add_line(f"d = cls.{__PRE_DESERIALIZE__}(d, options=options)")
             self.add_line("try:")
             with self.indent():
                 self.add_line("kwargs = {}")
@@ -313,7 +313,7 @@ class CodeBuilder:
                     )
                 else:
                     self.add_line(
-                        f"return cls.{__POST_DESERIALIZE__}(cls(**kwargs))"
+                        f"return cls.{__POST_DESERIALIZE__}(cls(**kwargs), options=options)"
                     )
             else:
                 self.add_line("return cls(**kwargs)")
@@ -325,12 +325,12 @@ class CodeBuilder:
         self.reset()
         self.add_line(
             "def to_dict(self, use_bytes=False, use_enum=False, "
-            "use_datetime=False):"
+            "use_datetime=False, options=None):"
         )
         with self.indent():
             pre_serialize = self.get_declared_hook(__PRE_SERIALIZE__)
             if pre_serialize:
-                self.add_line(f"self = self.{__PRE_SERIALIZE__}()")
+                self.add_line(f"self = self.{__PRE_SERIALIZE__}(options=options)")
             self.add_line("kwargs = {}")
             for fname, ftype in self.field_types.items():
                 metadata = self.metadatas.get(fname)
@@ -349,7 +349,7 @@ class CodeBuilder:
                     self.add_line(f"kwargs['{fname}'] = {packed_value}")
             post_serialize = self.get_declared_hook(__POST_SERIALIZE__)
             if post_serialize:
-                self.add_line(f"return self.{__POST_SERIALIZE__}(kwargs)")
+                self.add_line(f"return self.{__POST_SERIALIZE__}(kwargs, options=options)")
             else:
                 self.add_line("return kwargs")
         self.add_line("setattr(cls, 'to_dict', to_dict)")
@@ -373,7 +373,7 @@ class CodeBuilder:
         if is_dataclass(ftype):
             return (
                 overridden
-                or f"{value_name}.to_dict(use_bytes, use_enum, use_datetime)"
+                or f"{value_name}.to_dict(use_bytes, use_enum, use_datetime, options)"
             )
 
         with suppress(TypeError):
@@ -399,7 +399,7 @@ class CodeBuilder:
                     )
                     return (
                         f"self.{method_name}({value_name},"
-                        f"use_bytes,use_enum,use_datetime)"
+                        f"use_bytes,use_enum,use_datetime,options)"
                     )
             elif origin_type is typing.AnyStr:
                 raise UnserializableDataError(
@@ -606,7 +606,7 @@ class CodeBuilder:
         if is_dataclass(ftype):
             return overridden or (
                 f"{type_name(ftype)}.from_dict({value_name}, "
-                f"use_bytes, use_enum, use_datetime)"
+                f"use_bytes, use_enum, use_datetime, options)"
             )
 
         with suppress(TypeError):
@@ -637,7 +637,7 @@ class CodeBuilder:
                     )
                     return (
                         f"cls.{method_name}({value_name},"
-                        f"use_bytes,use_enum,use_datetime)"
+                        f"use_bytes,use_enum,use_datetime,options)"
                     )
             elif origin_type is typing.AnyStr:
                 raise UnserializableDataError(
@@ -924,7 +924,7 @@ class CodeBuilder:
         )
         lines.append(
             f"def {method_name}"
-            f"(self,value,use_bytes=False,use_enum=False,use_datetime=False):"
+            f"(self,value,use_bytes=False,use_enum=False,use_datetime=False,options=None):"
         )
         with lines.indent():
             for packer in [
@@ -952,7 +952,7 @@ class CodeBuilder:
         lines.append("@classmethod")
         lines.append(
             f"def {method_name}"
-            f"(cls,value,use_bytes=False,use_enum=False,use_datetime=False):"
+            f"(cls,value,use_bytes=False,use_enum=False,use_datetime=False,options=None):"
         )
         with lines.indent():
             for unpacker in [
