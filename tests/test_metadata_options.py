@@ -210,3 +210,22 @@ def test_datetime_serialize_option():
     should_be = {"x": "2021-01-02 03:04:05"}
     instance = DataClass(x=datetime(2021, 1, 2, 3, 4, 5, tzinfo=timezone.utc))
     assert instance.to_dict() == should_be
+
+def test_non_serializable_class_options():
+    @dataclass
+    class DataClassA:
+        name: str
+        unique_id: int
+
+    @dataclass
+    class DataClassB(DataClassDictMixin):
+        objA: DataClassA = field(
+            metadata={"serialize": lambda v: 'None', "deserialize": lambda v: 'None'}
+        )
+        name: str
+    instance = DataClassB(name="testing", objA={"name": "testingA", "unique_id" :123})
+    assert instance
+    should_be = {"name": "testing", "objA": 'None'}
+    assert instance.to_dict() == should_be
+
+
